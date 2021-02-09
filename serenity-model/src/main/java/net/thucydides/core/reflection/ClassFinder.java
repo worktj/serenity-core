@@ -1,13 +1,15 @@
 package net.thucydides.core.reflection;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.File;
 import java.net.URI;
 import java.net.URL;
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Load classes from a given package.
@@ -19,6 +21,7 @@ public class ClassFinder {
     private final ClassLoader classLoader;
     private final Class annotation;
     private Class<?> parentInterface;
+    private Predicate<Class> condition;
 
     private ClassFinder(ClassLoader classLoader, Class annotation) {
         this.classLoader = classLoader;
@@ -64,6 +67,9 @@ public class ClassFinder {
         }
         if (parentInterface != null) {
             return (parentInterface.isAssignableFrom(clazz) && !clazz.isInterface());
+        }
+        if (condition != null) {
+            return condition.test(clazz);
         }
         return true;
     }
@@ -186,5 +192,11 @@ public class ClassFinder {
         this.parentInterface = parentInterface;
         return this;
     }
+
+    public ClassFinder thatMatch(final Predicate<Class> condition) {
+        this.condition = condition;
+        return this;
+    }
+
 }
 

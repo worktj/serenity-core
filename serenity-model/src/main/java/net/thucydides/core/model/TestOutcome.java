@@ -25,6 +25,7 @@ import net.thucydides.core.model.stacktrace.FailureCause;
 import net.thucydides.core.model.stacktrace.RootCauseAnalyzer;
 import net.thucydides.core.reports.json.JSONConverter;
 import net.thucydides.core.reports.remoteTesting.LinkGenerator;
+import net.thucydides.core.requirements.reports.ScenarioOutcome;
 import net.thucydides.core.screenshots.ScreenshotAndHtmlSource;
 import net.thucydides.core.statistics.service.TagProvider;
 import net.thucydides.core.statistics.service.TagProviderService;
@@ -61,7 +62,7 @@ import static org.apache.commons.lang3.StringUtils.isNotBlank;
 /**
  * Represents the results of a test (or "scenario") execution. This
  * includes the narrative steps taken during the test, screenshots at each step,
- * the results of each step, and the overall result. A test scenario
+ * the results of each step, and the overall result. A test getscenario
  * can be associated with a user story using the UserStory annotation.
  * <p/>
  * A TestOutcome is stored after a test is executed. When the aggregate reports
@@ -139,6 +140,8 @@ public class TestOutcome {
      * Identifies the project associated with this test.
      */
     private String project;
+
+    private Rule rule;
 
     private FailureCause testFailureCause;
     private TestFailureCause flakyTestFailureCause;
@@ -243,6 +246,14 @@ public class TestOutcome {
      */
     private List<CastMember> actors;
 
+    private ExternalLink externalLink;
+
+    /**
+     * An indication of the order of appearance that this scenario should appear in the story or feature.
+     * Used for JUnit tests.
+     */
+    private Integer order;
+
     /**
      * Fields used for serialization
      */
@@ -254,7 +265,6 @@ public class TestOutcome {
      * Scenario outline text.
      */
     private String scenarioOutline;
-
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TestOutcome.class);
 
@@ -369,7 +379,7 @@ public class TestOutcome {
         return this;
     }
 
-    public TestOutcome asManualTest() {
+    public TestOutcome setToManual() {
         this.manual = true;
         addTag(TestTag.withName("manual").andType("tag"));
         return this;
@@ -398,7 +408,9 @@ public class TestOutcome {
     public EnvironmentVariables getEnvironmentVariables() {
         if (environmentVariables == null) {
             environmentVariables = Injectors.getInjector().getProvider(EnvironmentVariables.class).get();
-            this.context = contextFrom(environmentVariables);
+            if(this.context==null){
+                this.context = contextFrom(environmentVariables);
+            }
         }
         return environmentVariables;
     }
@@ -432,6 +444,7 @@ public class TestOutcome {
         this.flagProvider = Injectors.getInjector().getInstance(FlagProvider.class);
         this.environmentVariables = environmentVariables;
         this.context = contextFrom(environmentVariables);
+        this.order = TestCaseOrder.definedIn(testCase, name);
 
         this.projectKey = ThucydidesSystemProperty.THUCYDIDES_PROJECT_KEY.from(environmentVariables, "");
     }
@@ -470,7 +483,9 @@ public class TestOutcome {
                 this.lastTested,
                 this.manualTestEvidence,
                 this.projectKey,
-                this.environmentVariables);
+                this.environmentVariables,
+                this.externalLink,
+                this.context);
     }
 
     protected TestOutcome(final ZonedDateTime startTime,
@@ -499,7 +514,9 @@ public class TestOutcome {
                           final String lastTested,
                           final List<String> testEvidence,
                           final String projectKey,
-                          final EnvironmentVariables environmentVariables) {
+                          final EnvironmentVariables environmentVariables,
+                          final ExternalLink externalLink,
+    final String context) {
         this.startTime = startTime;
         this.duration = duration;
         this.title = title;
@@ -532,6 +549,8 @@ public class TestOutcome {
         this.lastTested = lastTested;
         this.projectKey = projectKey;
         this.environmentVariables = environmentVariables;
+        this.externalLink = externalLink;
+        this.context=context;
     }
 
     private List<String> removeDuplicates(List<String> issues) {
@@ -585,7 +604,9 @@ public class TestOutcome {
                     this.lastTested,
                     this.manualTestEvidence,
                     this.projectKey,
-                    this.environmentVariables);
+                    this.environmentVariables,
+                    this.externalLink,
+                    this.context);
         } else {
             return this;
         }
@@ -618,7 +639,9 @@ public class TestOutcome {
                 this.lastTested,
                 this.manualTestEvidence,
                 this.projectKey,
-                this.environmentVariables);
+                this.environmentVariables,
+                this.externalLink,
+                this.context);
     }
 
     public TestOutcome withTags(Set<TestTag> tags) {
@@ -648,7 +671,9 @@ public class TestOutcome {
                 this.lastTested,
                 this.manualTestEvidence,
                 this.projectKey,
-                this.environmentVariables);
+                this.environmentVariables,
+                this.externalLink,
+                this.context);
     }
 
     public TestOutcome withMethodName(String methodName) {
@@ -679,7 +704,9 @@ public class TestOutcome {
                     this.lastTested,
                     this.manualTestEvidence,
                     this.projectKey,
-                    this.environmentVariables);
+                    this.environmentVariables,
+                    this.externalLink,
+                    this.context);
         } else {
             return this;
         }
@@ -727,11 +754,11 @@ public class TestOutcome {
     }
 
     public TitleBuilder getUnqualified() {
-        return new TitleBuilder(this, issueTracking, environmentVariables, false);
+        return new TitleBuilder(this, issueTracking, getEnvironmentVariables(), false);
     }
 
     public TitleBuilder getQualified() {
-        return new TitleBuilder(this, issueTracking, environmentVariables, true);
+        return new TitleBuilder(this, issueTracking, getEnvironmentVariables(), true);
     }
 
     public void setAllStepsTo(TestResult result) {
@@ -865,7 +892,9 @@ public class TestOutcome {
                 this.lastTested,
                 this.manualTestEvidence,
                 this.projectKey,
-                this.environmentVariables);
+                this.environmentVariables,
+                this.externalLink,
+                this.context);
     }
 
     public void updateTopLevelStepResultsTo(TestResult result) {
@@ -890,19 +919,19 @@ public class TestOutcome {
     }
 
     public boolean hasTagWithName(String tagName) {
-        return java.util.Optional.ofNullable(tags).orElse(Collections.emptySet())
+        return java.util.Optional.ofNullable(getAllTags()).orElse(Collections.emptySet())
                 .stream()
                 .anyMatch(tag -> tag.getName().equalsIgnoreCase(tagName));
     }
 
     public boolean hasTagWithType(String tagType) {
-        return java.util.Optional.ofNullable(tags).orElse(Collections.emptySet())
+        return java.util.Optional.ofNullable(getAllTags()).orElse(Collections.emptySet())
                 .stream()
                 .anyMatch(tag -> tag.getType().equalsIgnoreCase(tagType));
     }
 
     public boolean hasTagWithTypes(List<String> tagTypes) {
-        return java.util.Optional.ofNullable(tags).orElse(Collections.emptySet())
+        return java.util.Optional.ofNullable(getAllTags()).orElse(Collections.emptySet())
                 .stream()
                 .anyMatch(tag -> tagTypes.contains(tag.getType()));
     }
@@ -964,8 +993,22 @@ public class TestOutcome {
 
     public List<ManualTestEvidence> getRenderedManualTestEvidence() {
         return manualTestEvidence.stream()
-                .map(evidence -> ManualTestEvidence.from(evidence))
+                .map(ManualTestEvidence::from)
                 .collect(Collectors.toList());
+    }
+
+    public void setLink(ExternalLink externalLink) {
+        if (isDataDriven()) {
+            getLatestTopLevelTestStep().ifPresent(
+                    latestStep -> latestStep.setExternalLink(externalLink)
+            );
+        } else {
+            this.externalLink = externalLink;
+        }
+    }
+
+    public boolean hasNoSteps() {
+        return (testSteps == null || testSteps.isEmpty());
     }
 
     private static class TestOutcomeWithEnvironmentBuilder {
@@ -1184,7 +1227,25 @@ public class TestOutcome {
      * @return A list of top-level test steps for this test.
      */
     public List<TestStep> getTestSteps() {
-        return testSteps;
+        return annotatedStepsFrom(testSteps);
+    }
+
+    public Optional<TestStep> getLatestTopLevelTestStep() {
+        int latestStep = testSteps.size() - 1;
+        return (latestStep >= 0) ?
+                Optional.of(annotatedStepsFrom(testSteps).get(latestStep))
+                : Optional.empty();
+    }
+
+    private List<TestStep> annotatedStepsFrom(List<TestStep> testSteps) {
+        // For manual tests, all top level steps respect the manual test result if defined
+        if (isManual()) {
+            return testSteps.stream().map(
+                    step -> step.withResult(getResult()).asManual()
+            ).collect(Collectors.toList());
+        } else {
+            return testSteps;
+        }
     }
 
     public boolean hasScreenshots() {
@@ -1286,6 +1347,10 @@ public class TestOutcome {
     public TestResult getResult() {
         if (result != null) {
             return result;
+        }
+
+        if (isManual() && (annotatedResult != null)) {
+            return annotatedResult;
         }
 
         if ((TestResult.IGNORED == annotatedResult) || (TestResult.SKIPPED == annotatedResult) || TestResult.PENDING == annotatedResult) {
@@ -1435,7 +1500,9 @@ public class TestOutcome {
      * @return The current step is the last step in the step list, or the last step in the children of the current step group.
      */
     public Optional<TestStep> currentStep() {
-        if (testSteps.isEmpty()) { return Optional.empty(); }
+        if (testSteps.isEmpty()) {
+            return Optional.empty();
+        }
 
         if (!inGroup()) {
             return Optional.ofNullable(lastStepIn(testSteps));
@@ -1458,7 +1525,9 @@ public class TestOutcome {
     }
 
     private TestStep lastStepIn(final List<TestStep> testSteps) {
-        if (testSteps.isEmpty()) { return null; }
+        if (testSteps.isEmpty()) {
+            return null;
+        }
         return testSteps.get(testSteps.size() - 1);
     }
 
@@ -1722,6 +1791,14 @@ public class TestOutcome {
         return this;
     }
 
+    public Rule getRule() {
+        return rule;
+    }
+
+    public void setRule(Rule rule) {
+        this.rule = rule;
+    }
+
     public String getProject() {
         return project;
     }
@@ -1859,7 +1936,7 @@ public class TestOutcome {
 
     public List<String> getIssueKeys() {
         return getIssues().stream()
-                .map(issue -> IssueKeyFormat.forEnvironment(environmentVariables).andKey(issue))
+                .map(issue -> IssueKeyFormat.forEnvironment(getEnvironmentVariables()).andKey(issue))
                 .collect(Collectors.toList());
     }
 
@@ -1889,10 +1966,18 @@ public class TestOutcome {
 
     public String getContext() {
         if (context == null) {
-            context = contextFrom(environmentVariables);
+            context = contextFrom(getEnvironmentVariables());
         }
 
         return context;
+    }
+    
+    /**
+     * Setting the context
+     * @param context
+     */
+    public void setContext(String context) {
+    	this.context = context;
     }
 
     /**
@@ -1989,11 +2074,21 @@ public class TestOutcome {
     private int countDataRowsWithResult(TestResult expectedResult, TestType expectedType) {
         int matchingRowCount = 0;
         if (typeCompatibleWith(expectedType)) {
-            for (DataTableRow row : getDataTable().getRows()) {
-                matchingRowCount += (row.getResult() == expectedResult) ? 1 : 0;
+            if (resultsAreUndefinedIn(getDataTable())) {
+                for (TestStep step : getTestSteps()) {
+                    matchingRowCount += (step.getResult() == expectedResult) ? 1 : 0;
+                }
+            } else {
+                for (DataTableRow row : getDataTable().getRows()) {
+                    matchingRowCount += (row.getResult() == expectedResult) ? 1 : 0;
+                }
             }
         }
         return matchingRowCount;
+    }
+
+    private boolean resultsAreUndefinedIn(DataTable dataTable) {
+        return dataTable.getRows().stream().allMatch( row -> row.getResult() == TestResult.UNDEFINED);
     }
 
     public int countNestedStepsWithResult(TestResult expectedResult, TestType testType) {
@@ -2082,7 +2177,7 @@ public class TestOutcome {
     }
 
     public void setManualTestingUpToDate(Boolean upToDate) {
-        this.isManualTestingUpToDate  = upToDate;
+        this.isManualTestingUpToDate = upToDate;
     }
 
     public Set<? extends Flag> getFlags() {
@@ -2237,8 +2332,10 @@ public class TestOutcome {
     }
 
     public ZonedDateTime getEndTime() {
-        if (startTime == null) { return null; }
-        return startTime.plusNanos( duration * 1000);
+        if (startTime == null) {
+            return null;
+        }
+        return startTime.plusNanos(duration * 1000);
     }
 
     /**
@@ -2477,10 +2574,13 @@ public class TestOutcome {
     @Override
     public int hashCode() {
         int result = name != null ? name.hashCode() : 0;
-        result = 31 * result + (testCase != null ? testCase.hashCode() : 0);
-        result = 31 * result + (userStory != null ? userStory.hashCode() : 0);
-        result = 31 * result + (title != null ? title.hashCode() : 0);
+        result = 31 * result + (id != null ? id.hashCode() : 0);
+        result = 31 * result + (name != null ? name.hashCode() : 0);
         result = 31 * result + (qualifier != null ? qualifier.hashCode() : 0);
+        result = 31 * result + (context != null ? context.hashCode() : 0);
+        result = 31 * result + (testCaseName != null ? testCaseName.hashCode() : 0);
+        result = 31 * result + (title != null ? title.hashCode() : 0);
+        result = 31 * result + (userStory != null ? userStory.hashCode() : 0);
         result = 31 * result + (manual ? 1 : 0);
         return result;
     }
@@ -2601,7 +2701,6 @@ public class TestOutcome {
         if (!TestTags.of(dataTable.getTags()).containsTagMatchingOneOf(filterTags)) {
             return this;
         }
-
         if (testSteps.size() != dataTable.getSize()) {
             return this;
         }
@@ -2644,6 +2743,21 @@ public class TestOutcome {
                 lastTested,
                 manualTestEvidence,
                 projectKey,
-                environmentVariables);
+                environmentVariables,
+                externalLink,
+                context);
+    }
+
+    public ExternalLink getExternalLink() {
+        return externalLink;
+    }
+
+    public void setOrder(int order) {
+        this.order = order;
+    }
+
+    public Integer getOrder() {
+        if (order == null) { return 0; }
+        return order;
     }
 }

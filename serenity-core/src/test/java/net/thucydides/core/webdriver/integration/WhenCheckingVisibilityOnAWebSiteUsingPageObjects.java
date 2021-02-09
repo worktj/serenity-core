@@ -1,5 +1,7 @@
 package net.thucydides.core.webdriver.integration;
 
+import com.gargoylesoftware.htmlunit.BrowserVersion;
+import io.github.bonigarcia.wdm.WebDriverManager;
 import net.serenitybdd.core.pages.PageObject;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -11,6 +13,7 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.htmlunit.HtmlUnitDriver;
 
 import static net.thucydides.core.webdriver.StaticTestSite.fileInClasspathCalled;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -38,9 +41,10 @@ public class WhenCheckingVisibilityOnAWebSiteUsingPageObjects {
     @BeforeClass
     public static void openStaticTestSite() {
         String url = "file://" + fileInClasspathCalled("static-site/index.html").getAbsolutePath();
-        ChromeOptions chromeOptions = new ChromeOptions();
-        chromeOptions.addArguments("--headless");
-        driver = new ChromeDriver(chromeOptions);
+        WebDriverManager.chromedriver().setup();
+        ChromeOptions options = new ChromeOptions();
+        options.addArguments("--headless", "--disable-gpu", "--window-size=1920,1200");
+        driver = new ChromeDriver(options);
         driver.get(url);
     }
 

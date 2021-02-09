@@ -4,7 +4,16 @@ ext {
 }
 
 test {
-    maxParallelForks = Integer.parseInt(System.getProperty("forks","1"))
+    maxParallelForks = Integer.parseInt(System.getProperty("forks","8"))
+}
+
+configurations {
+    compile {
+        exclude group: 'org.junit.jupiter'
+    }
+    testCompile {
+        exclude group: 'org.junit.jupiter'
+    }
 }
 
 dependencies {
@@ -12,6 +21,7 @@ dependencies {
     compile project(':serenity-core')
     compile "junit:junit:${junitVersion}"
     compile "org.hamcrest:hamcrest-core:${hamcrestVersion}"
+    compile "org.opentest4j:opentest4j:${opentest4jVersion}"
 
     testCompile project(':serenity-test-utils')
     testCompile "commons-dbcp:commons-dbcp:1.3"

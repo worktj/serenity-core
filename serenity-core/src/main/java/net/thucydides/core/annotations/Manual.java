@@ -6,18 +6,15 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
-import java.time.LocalDate;
 
 /**
- * Annotation that marks a test or test step as pending implementation.
+ * Annotation that marks a manual test.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.METHOD)
 public @interface Manual {
     /**
      * Specify the most recent result of manual testing.
-     * This will expire after a certain number of days, configurable with the "manual.result.expiry.limit" property
-     * (by default 15).
      */
     TestResult result() default TestResult.PENDING;
 

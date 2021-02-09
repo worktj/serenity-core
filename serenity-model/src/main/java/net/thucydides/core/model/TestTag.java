@@ -1,7 +1,7 @@
 package net.thucydides.core.model;
 
-import net.serenitybdd.core.strings.Joiner;
 import com.google.common.base.Preconditions;
+import net.serenitybdd.core.strings.Joiner;
 
 import java.util.Optional;
 
@@ -11,6 +11,7 @@ import static org.apache.commons.lang3.StringUtils.isEmpty;
 public class TestTag implements Comparable<TestTag> {
 
     public static final TestTag EMPTY_TAG = new TestTag("","");
+    public static final String DEFAULT_TAG_TYPE = "tag";
 
     private final String name;
     private final String type;
@@ -79,7 +80,7 @@ public class TestTag implements Comparable<TestTag> {
         } else if (value.contains("=")) {
             return getTestTag(value, value.indexOf("="));
         } else {
-            return TestTag.withName(value.trim()).andType("tag");
+            return TestTag.withName(value.trim()).andType(DEFAULT_TAG_TYPE);
         }
     }
 
@@ -109,6 +110,9 @@ public class TestTag implements Comparable<TestTag> {
 
     public boolean isAsOrMoreSpecificThan(TestTag testTag) {
         if (this.equals(testTag)) {
+            return true;
+        }
+        if (testTag.normalisedName().replaceFirst(".*?([^\\.]+)$", "$1").equals(this.normalisedName()) && (this.getType().equals(testTag.getType()))) {
             return true;
         }
         if ((this.normalisedName().endsWith("/" + testTag.normalisedName())) && (this.getType().equals(testTag.getType()))) {
@@ -155,9 +159,10 @@ public class TestTag implements Comparable<TestTag> {
 
     @Override
     public String toString() {
-        return "TestTag{" +
-                "name='" + name + '\'' +
-                ", type='" + type + '\'' +
-                '}';
+        if (type.isEmpty()) {
+            return name;
+        } else {
+            return type + ":" + name;
+        }
     }
 }

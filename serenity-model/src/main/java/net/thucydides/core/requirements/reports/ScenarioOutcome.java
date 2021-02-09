@@ -1,10 +1,13 @@
 package net.thucydides.core.requirements.reports;
 
+import net.thucydides.core.model.Rule;
 import net.thucydides.core.model.TestResult;
 import net.thucydides.core.model.TestTag;
 
 import java.time.ZonedDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public interface ScenarioOutcome {
@@ -54,4 +57,8 @@ public interface ScenarioOutcome {
     String getParentReport();
 
     Set<TestTag> getTags();
+
+    Map<String, Collection<TestTag>> getExampleTags();
+
+    Rule getRule();
 }

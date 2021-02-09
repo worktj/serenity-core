@@ -1,5 +1,6 @@
 package net.serenitybdd.core.webdriver.driverproviders;
 
+import io.github.bonigarcia.wdm.WebDriverManager;
 import net.serenitybdd.core.buildinfo.DriverCapabilityRecord;
 import net.serenitybdd.core.di.WebDriverInjectors;
 import net.serenitybdd.core.time.InternalSystemClock;
@@ -14,7 +15,6 @@ import net.thucydides.core.webdriver.CapabilityEnhancer;
 import net.thucydides.core.webdriver.stubs.WebDriverStub;
 import org.openqa.selenium.NoSuchSessionException;
 import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.chrome.ChromeOptions;
 import org.openqa.selenium.ie.InternetExplorerDriver;
 import org.openqa.selenium.ie.InternetExplorerOptions;
 import org.openqa.selenium.remote.CapabilityType;
@@ -28,6 +28,8 @@ import static net.thucydides.core.ThucydidesSystemProperty.*;
 import static net.thucydides.core.webdriver.SupportedWebDriver.IEXPLORER;
 
 public class InternetExplorerDriverProvider implements DriverProvider {
+
+    private Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final DriverCapabilityRecord driverProperties;
     private static final Logger LOGGER = LoggerFactory.getLogger(InternetExplorerDriverProvider.class);
@@ -47,6 +49,13 @@ public class InternetExplorerDriverProvider implements DriverProvider {
     public WebDriver newInstance(String options, EnvironmentVariables environmentVariables) {
         if (StepEventBus.getEventBus().webdriverCallsAreSuspended()) {
             return new WebDriverStub();
+        }
+
+        if(isDriverAutomaticallyDownloaded(environmentVariables)) {
+            logger.info("Using automatically driver download");
+            WebDriverManager.iedriver().setup();
+        } else {
+            logger.info("Not using automatically driver download");
         }
 
         updateIEDriverBinaryIfSpecified();
@@ -96,12 +105,20 @@ public class InternetExplorerDriverProvider implements DriverProvider {
     private DesiredCapabilities recommendedDefaultInternetExplorerCapabilities() {
         DesiredCapabilities defaults = DesiredCapabilities.internetExplorer();
 
-        defaults.setCapability(InternetExplorerDriver.IGNORE_ZOOM_SETTING, true);
-        defaults.setCapability(InternetExplorerDriver.NATIVE_EVENTS, false);
-        defaults.setCapability(InternetExplorerDriver.REQUIRE_WINDOW_FOCUS, false);
+        defaults.setCapability(InternetExplorerDriver.IGNORE_ZOOM_SETTING,
+                               IE_OPTIONS_IGNORE_ZOOM_LEVEL.booleanFrom(environmentVariables, true));
+        defaults.setCapability(InternetExplorerDriver.NATIVE_EVENTS,
+                               IE_OPTIONS_ENABLE_NATIVE_EVENTS.booleanFrom(environmentVariables, true));
+        defaults.setCapability(InternetExplorerDriver.REQUIRE_WINDOW_FOCUS,
+                               IE_OPTIONS_REQUIRE_WINDOW_FOCUS.booleanFrom(environmentVariables, false));
         defaults.setCapability(CapabilityType.TAKES_SCREENSHOT, true);
         defaults.setJavascriptEnabled(true);
 
+
+        /*
+        IgnoreZoomLevel = true,
+EnableNativeEvents = true, RequireWindowFocus = true};
+         */
         defaults = AddEnvironmentSpecifiedDriverCapabilities.from(environmentVariables).forDriver(IEXPLORER).to(defaults);
 
         if (ACCEPT_INSECURE_CERTIFICATES.booleanFrom(environmentVariables, false)) {

@@ -1,11 +1,14 @@
 package net.thucydides.core.requirements.reports;
 
 import net.thucydides.core.digest.Digest;
+import net.thucydides.core.model.Rule;
 import net.thucydides.core.model.TestResult;
 import net.thucydides.core.model.TestTag;
 
 import java.time.ZonedDateTime;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class ScenarioSummaryOutcome implements ScenarioOutcome {
@@ -23,6 +26,8 @@ public class ScenarioSummaryOutcome implements ScenarioOutcome {
     private final String parentReport;
     private final Boolean manual;
     private final Set<TestTag> tags;
+    private final Map<String, Collection<TestTag>> exampleTags;
+    private Rule rule;
 
     public ScenarioSummaryOutcome(String name,
                                   String type,
@@ -36,7 +41,9 @@ public class ScenarioSummaryOutcome implements ScenarioOutcome {
                                   Boolean isManual,
                                   String parentName,
                                   String parentReport,
-                                  Set<TestTag> tags) {
+                                  Set<TestTag> tags,
+                                  Map<String, Collection<TestTag>> exampleTags,
+                                  Rule rule) {
         this.name = name;
         this.type = type;
         this.id = Digest.ofTextValue(name);
@@ -51,6 +58,8 @@ public class ScenarioSummaryOutcome implements ScenarioOutcome {
         this.parentReport = parentReport;
         this.manual = isManual;
         this.tags = tags;
+        this.exampleTags = exampleTags;
+        this.rule = rule;
     }
 
     public String toString() {
@@ -153,4 +162,12 @@ public class ScenarioSummaryOutcome implements ScenarioOutcome {
     public Set<TestTag> getTags() {
         return tags;
     }
+
+    @Override
+    public Map<String, Collection<TestTag>> getExampleTags() {
+        return exampleTags;
+    }
+
+    @Override
+    public Rule getRule() { return rule; }
 }

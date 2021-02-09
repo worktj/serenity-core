@@ -4,7 +4,6 @@ import net.serenitybdd.core.Serenity;
 import net.serenitybdd.core.exceptions.TestCompromisedException;
 import net.serenitybdd.screenplay.Ability;
 import net.serenitybdd.screenplay.Actor;
-import net.serenitybdd.screenplay.Performable;
 import net.thucydides.core.model.CastMember;
 import net.thucydides.core.model.Story;
 import net.thucydides.core.model.TestOutcome;
@@ -94,6 +93,19 @@ public class WhenDeclaringFactsAboutActors {
 
     @Test
     public void facts_let_us_setup_and_teardown_test_data() {
+
+        Actor tim = Actor.named("Tim");
+
+        tim.has(ASavingsAccount.numbered("Savings-123456"));
+
+        StepEventBus.getEventBus().testFinished();
+
+        assertThat(knownAccounts).contains("Savings-123456");
+        assertThat(existingSavingsAccounts).doesNotContain("Savings-123456");
+    }
+
+    @Test
+    public void fact_setup_and_teardown_methods_are_only_called_once_per_test() {
 
         Actor tim = Actor.named("Tim");
 

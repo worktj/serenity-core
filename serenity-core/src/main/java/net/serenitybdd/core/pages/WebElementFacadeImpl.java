@@ -1,7 +1,10 @@
 package net.serenitybdd.core.pages;
 
 import com.google.common.base.Splitter;
-import io.appium.java_client.*;
+import io.appium.java_client.AppiumDriver;
+import io.appium.java_client.FindsByAccessibilityId;
+import io.appium.java_client.FindsByAndroidUIAutomator;
+import io.appium.java_client.MobileElement;
 import net.serenitybdd.core.time.InternalSystemClock;
 import net.thucydides.core.ThucydidesSystemProperty;
 import net.thucydides.core.annotations.locators.MethodTiming;
@@ -17,23 +20,20 @@ import net.thucydides.core.webdriver.exceptions.*;
 import net.thucydides.core.webdriver.javascript.JavascriptExecutorFacade;
 import net.thucydides.core.webdriver.stubs.WebElementFacadeStub;
 import org.apache.commons.lang3.StringUtils;
-import org.openqa.selenium.*;
 import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.*;
 import org.openqa.selenium.interactions.Coordinates;
 import org.openqa.selenium.interactions.Locatable;
-import org.openqa.selenium.remote.server.handler.ClearElement;
 import org.openqa.selenium.support.pagefactory.ElementLocator;
 import org.openqa.selenium.support.ui.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Clock;
-import java.time.temporal.ChronoUnit;
+import java.time.Duration;
 import java.time.temporal.TemporalUnit;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.time.Duration;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static net.serenitybdd.core.pages.ParameterisedLocator.withArguments;
@@ -74,6 +74,23 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
         this.webElement = webElement;
         this.driver = driver;
         this.locator = locator;
+        this.bySelector = bySelector;
+        this.webdriverClock = Clock.systemDefaultZone();
+        this.sleeper = Sleeper.SYSTEM_SLEEPER;
+        this.javascriptExecutorFacade = new JavascriptExecutorFacade(driver);
+        this.environmentVariables = Injectors.getInjector().getProvider(EnvironmentVariables.class).get();
+        this.implicitTimeoutInMilliseconds = implicitTimeoutInMilliseconds;
+        this.waitForTimeoutInMilliseconds = (waitForTimeoutInMilliseconds >= 0) ? waitForTimeoutInMilliseconds : defaultWaitForTimeout();
+    }
+
+    public WebElementFacadeImpl(final WebDriver driver,
+                                final WebElement webElement,
+                                final long implicitTimeoutInMilliseconds,
+                                final long waitForTimeoutInMilliseconds,
+                                final By bySelector) {
+        this.webElement = webElement;
+        this.driver = driver;
+        this.locator = null;
         this.bySelector = bySelector;
         this.webdriverClock = Clock.systemDefaultZone();
         this.sleeper = Sleeper.SYSTEM_SLEEPER;
@@ -135,7 +152,7 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
     }
 
     private WebElementFacadeImpl copy() {
-        return new WebElementFacadeImpl(driver, locator, webElement, implicitTimeoutInMilliseconds, waitForTimeoutInMilliseconds);
+        return BuildWebElementFacade.from(driver, locator, webElement, implicitTimeoutInMilliseconds, waitForTimeoutInMilliseconds);
     }
 
     public WebElementFacadeImpl(final WebDriver driver,
@@ -143,6 +160,7 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
                                 final long implicitTimeoutInMilliseconds) {
         this(driver, locator, null, implicitTimeoutInMilliseconds, implicitTimeoutInMilliseconds);
     }
+
 
     public WebElementFacadeImpl(final WebDriver driver,
                                 final ElementLocator locator,
@@ -155,8 +173,7 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
                                                                 final WebElement element,
                                                                 final long timeoutInMilliseconds,
                                                                 final long waitForTimeoutInMilliseconds) {
-        return (T) new WebElementFacadeImpl(driver, null, element, timeoutInMilliseconds, waitForTimeoutInMilliseconds)
-                .foundBy("<Undefined web element>");
+        return BuildWebElementFacade.from(driver, element, timeoutInMilliseconds, waitForTimeoutInMilliseconds);
     }
 
     public static <T extends WebElementFacade> T wrapWebElement(final WebDriver driver,
@@ -164,8 +181,7 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
                                                                 final long timeoutInMilliseconds,
                                                                 final long waitForTimeoutInMilliseconds,
                                                                 final String foundBy) {
-        return (T) new WebElementFacadeImpl(driver, null, element, timeoutInMilliseconds, waitForTimeoutInMilliseconds)
-                .foundBy(foundBy);
+        return BuildWebElementFacade.from(driver, element, timeoutInMilliseconds, waitForTimeoutInMilliseconds, foundBy);
     }
 
     public static <T extends WebElementFacade> T wrapWebElement(WebDriver driver,
@@ -176,8 +192,7 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
                                                                 long timeoutInMilliseconds,
                                                                 long waitForTimeoutInMilliseconds,
                                                                 String foundBy) {
-        return (T) new WebElementFacadeImpl(driver, locator, element, resolvedELement, bySelector, timeoutInMilliseconds, waitForTimeoutInMilliseconds)
-                .foundBy(foundBy);
+        return BuildWebElementFacade.from(driver, resolvedELement, element, bySelector, locator, timeoutInMilliseconds, waitForTimeoutInMilliseconds, foundBy);
     }
 
     public static <T extends WebElementFacade> T wrapWebElement(final WebDriver driver,
@@ -185,15 +200,13 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
                                                                 final long timeoutInMilliseconds,
                                                                 final long waitForTimeoutInMilliseconds,
                                                                 final String foundBy) {
-        return (T) new WebElementFacadeImpl(driver, null, null, timeoutInMilliseconds, waitForTimeoutInMilliseconds, bySelector)
-                .foundBy(foundBy);
+        return BuildWebElementFacade.from(driver, bySelector, timeoutInMilliseconds, waitForTimeoutInMilliseconds, foundBy);
     }
 
     public static <T extends WebElementFacade> T wrapWebElement(final WebDriver driver,
                                                                 final WebElement element,
                                                                 final long timeout) {
-        return (T) new WebElementFacadeImpl(driver, null, element, timeout, timeout).foundBy(element.toString());
-
+        return BuildWebElementFacade.from(driver, element, timeout);
     }
 
     private WebElementResolver getElementResolver() {
@@ -206,16 +219,20 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
         return WebElementResolver.byLocator(locator).withImplicitTimeout(implicitTimeoutInMilliseconds);
     }
 
-    protected WebElement getElement() {
+    public WebElement getElement() {
         if (driverIsDisabled()) {
             return new WebElementFacadeStub();
         }
+        return getResolvedElement();
+    }
 
-        if (resolvedELement != null) {
-            return resolvedELement;
+    private WebElement getResolvedElement() {
+        if (resolvedELement == null) {
+            resolvedELement = getElementResolver().resolveForDriver(driver);
         }
 
-        return (resolvedELement = getElementResolver().resolveForDriver(driver));
+        return resolvedELement;
+
     }
 
     protected JavascriptExecutorFacade getJavascriptExecutorFacade() {
@@ -280,10 +297,10 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
     }
 
     @Override
-    public List<WebElementFacade> thenFindAll(String xpathOrCssSelector) {
+    public ListOfWebElementFacades thenFindAll(String xpathOrCssSelector) {
         logIfVerbose("findAll " + xpathOrCssSelector);
         if (driverIsDisabled()) {
-            return new ArrayList<>();
+            return new ListOfWebElementFacades(new ArrayList<>());
         }
 
         List<WebElement> nestedElements;
@@ -296,16 +313,16 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
         return webElementFacadesFrom(nestedElements);
     }
 
-    public List<WebElementFacade> thenFindAll(String xpathOrCssSelector, Object... arguments) {
+    public ListOfWebElementFacades thenFindAll(String xpathOrCssSelector, Object... arguments) {
         return thenFindAll(withArguments(xpathOrCssSelector, arguments));
     }
 
-    private List<WebElementFacade> webElementFacadesFrom(List<WebElement> nestedElements) {
+    private ListOfWebElementFacades webElementFacadesFrom(List<WebElement> nestedElements) {
         List<WebElementFacade> results = new ArrayList<>();
         for (WebElement element : nestedElements) {
             results.add(wrapWebElement(driver, element, timeoutInMilliseconds(), waitForTimeoutInMilliseconds, element.toString()));
         }
-        return results;
+        return new ListOfWebElementFacades(results);
     }
 
     @Override
@@ -337,10 +354,10 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
     }
 
     @Override
-    public List<WebElementFacade> thenFindAll(By selector) {
+    public ListOfWebElementFacades thenFindAll(By selector) {
         logIfVerbose("findAll " + selector);
         if (driverIsDisabled()) {
-            return new ArrayList<>();
+            return new ListOfWebElementFacades(new ArrayList<>());
         }
 
         List<WebElement> nestedElements = findElements(selector);
@@ -381,24 +398,6 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
         }
 
         return ((FindsByAndroidUIAutomator) getElement()).findElementsByAndroidUIAutomator(using);
-    }
-
-    @Override
-    public WebElement findElementByIosUIAutomation(String using) {
-        if (driverIsDisabled()) {
-            return this;
-        }
-
-        return ((FindsByIosUIAutomation) getElement()).findElementByIosUIAutomation(using);
-    }
-
-    @Override
-    public List<WebElement> findElementsByIosUIAutomation(String using) {
-        if (driverIsDisabled()) {
-            return new ArrayList<>();
-        }
-
-        return ((FindsByIosUIAutomation) getElement()).findElementsByIosUIAutomation(using);
     }
 
     @Override
@@ -603,7 +602,17 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
         }
 
         WebElement element = getElement();
-        return ((element != null) && (element.getText().equals(value)));
+
+        if (element == null)
+            return false;
+
+        String text = element.getText();
+        if (text.isEmpty()) {
+            // https://github.com/serenity-bdd/serenity-core/issues/2134
+            // maybe it's an input element?
+            text = element.getAttribute("value");
+        }
+        return value.equals(text);
     }
 
     /**
@@ -787,7 +796,7 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
                 return true;
             }
         } catch (TimeoutException timeout) {
-            throw new ElementShouldBeEnabledException("Expected enabled element was not clickable", timeout);
+            return false;
         }
         return false;
     }
@@ -921,6 +930,26 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
     }
 
     @Override
+    public String getFirstSelectedOptionVisibleText() {
+        return new Select(this).getFirstSelectedOption().getText();
+    }
+
+    @Override
+    public List<String> getSelectedVisibleTexts() {
+        return new Select(this).getAllSelectedOptions().stream().map(WebElement::getText).collect(Collectors.toList());
+    }
+
+    @Override
+    public String getFirstSelectedOptionValue() {
+        return new Select(this).getFirstSelectedOption().getAttribute("value");
+    }
+
+    @Override
+    public List<String> getSelectedValues() {
+        return new Select(this).getAllSelectedOptions().stream().map(element -> element.getAttribute("value")).collect(Collectors.toList());
+    }
+
+    @Override
     @Deprecated
     public WebElementFacade selectByValue(String value) {
         return dropdownSelect().byValue(value);
@@ -941,7 +970,7 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
         if (driverIsDisabled()) {
             return null;
         }
-        return getWrappedElement().getScreenshotAs(target);
+        return getElement().getScreenshotAs(target);
     }
 
     protected void waitUntilElementAvailable() {
@@ -949,6 +978,13 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
             return;
         }
         withTimeoutOf((int) waitForTimeoutInMilliseconds, TimeUnit.MILLISECONDS).waitUntilEnabled();
+    }
+
+    protected void waitUntilElementPresent() {
+        if (driverIsDisabled()) {
+            return;
+        }
+        withTimeoutOf((int) waitForTimeoutInMilliseconds, TimeUnit.MILLISECONDS).waitUntilPresent();
     }
 
     protected boolean driverIsDisabled() {
@@ -1058,19 +1094,15 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
         throw new ElementShouldBePresentException(finalMessage, timeout);
     }
 
-    private static final List<String> HTML_ELEMENTS_WITH_VALUE_ATTRIBUTE = Arrays.asList("input", "button", "option");
-
     private boolean hasValueAttribute(WebElement element) {
-        String tag = element.getTagName().toLowerCase();
-        return HTML_ELEMENTS_WITH_VALUE_ATTRIBUTE.contains(tag);
-
+        return element.getAttribute("value") != null;
     }
 
     @Override
     public Wait<WebDriver> waitForCondition() {
         return new FluentWait<>(driver, webdriverClock, sleeper)
-                .withTimeout(waitForTimeoutInMilliseconds, TimeUnit.MILLISECONDS)
-                .pollingEvery(WAIT_FOR_ELEMENT_PAUSE_LENGTH, TimeUnit.MILLISECONDS)
+                .withTimeout(Duration.ofMillis(waitForTimeoutInMilliseconds))
+                .pollingEvery(Duration.ofMillis(WAIT_FOR_ELEMENT_PAUSE_LENGTH))
                 .ignoring(NoSuchElementException.class, NoSuchFrameException.class);
     }
 
@@ -1080,7 +1112,7 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
             return this;
         }
 
-        if (!withTimeoutOf(Duration.ofMillis(0)).isVisible()) {
+        if (!isCurrentlyVisible()) {
             return this;
         }
 
@@ -1215,18 +1247,36 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
     }
 
     /**
-     * Wait for an element to be visible and enabled, and then click on it.
+     * Click on an element, with or without waiting for it to be visible and enabled
      */
     @Override
-    public void click() {
+    public void click(ClickStrategy clickStrategy) {
         if (driverIsDisabled()) {
             return;
         }
 
-        waitUntilElementAvailable();
+        switch (clickStrategy) {
+            case WAIT_UNTIL_ENABLED:
+                waitUntilElementAvailable();
+                break;
+            case WAIT_UNTIL_PRESENT:
+                waitUntilElementPresent();
+                break;
+            case IMMEDIATE:
+                break;
+        }
+
         logClick();
         getElement().click();
         notifyScreenChange();
+    }
+
+    /**
+     * Wait for an element to be visible and enabled, and then click on it.
+     */
+    @Override
+    public void click() {
+        click(ClickStrategy.WAIT_UNTIL_ENABLED);
     }
 
     private void logClick() {
@@ -1356,10 +1406,6 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
         return getElement().getCssValue(propertyName);
     }
 
-    public WebElement getWrappedElement() {
-        return getElement();
-    }
-
     @Override
     public boolean containsElements(By bySelector) {
         return !findElements(bySelector).isEmpty();
@@ -1403,5 +1449,10 @@ public class WebElementFacadeImpl implements WebElementFacade, net.thucydides.co
     @Override
     public Coordinates getCoordinates() {
         return ((Locatable) getElement()).getCoordinates();
+    }
+
+    @Override
+    public WebElement getWrappedElement() {
+        return getResolvedElement();
     }
 }
